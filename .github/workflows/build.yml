@@ -1,0 +1,52 @@
+name: Build and Screenshot iOS App
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Compilar aplicación con Clang
+        run: |
+          SDK_PATH=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          mkdir -p HolaMundo.app
+
+          # Compilar el binario para arquitectura x86_64/arm64 del simulador
+          clang -arch arm64 -isysroot "$SDK_PATH" \
+            -mios-simulator-version-min=15.0 \
+            -fobjc-arc \
+            -framework UIKit -framework Foundation \
+            main.m AppDelegate.m ViewController.m \
+            -o HolaMundo.app/HolaMundo
+
+          # Copiar metadatos
+          cp Info.plist HolaMundo.app/
+
+      - name: Ejecutar en el simulador y tomar screenshot
+        run: |
+          # Buscar un simulador disponible (iPhone 15 o similar)
+          DEVICE_UDID=$(xcrun simctl list devices available | grep "iPhone" | head -n 1 | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
+          echo "Usando simulador: $DEVICE_UDID"
+
+          # Iniciar simulador
+          xcrun simctl boot "$DEVICE_UDID" || true
+
+          # Instalar y abrir la app
+          xcrun simctl install "$DEVICE_UDID" HolaMundo.app
+          xcrun simctl launch "$DEVICE_UDID" com.ejemplo.holamundo
+
+          # Esperar a que la interfaz cargue
+          sleep 4
+
+          # Capturar pantalla
+          xcrun simctl io "$DEVICE_UDID" screenshot screenshot.png
+
+      - name: Subir captura como evidencia
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-ios
+          path: screenshot.png
